@@ -3,11 +3,11 @@ const app = express();
 app.use(express.json());
 
 app.use((req, res, next) => {
-      console.log(">>> Peticion recibida: " + req.method + " " + req.path);
-      if (req.method === "POST") {
-              console.log(">>> Body recibido:", JSON.stringify(req.body));
-      }
-      next();
+        console.log(">>> Peticion recibida: " + req.method + " " + req.path);
+        if (req.method === "POST") {
+                  console.log(">>> Body recibido:", JSON.stringify(req.body));
+        }
+        next();
 });
 
 const VERIFY_TOKEN = "totalcarnes2026";
@@ -19,102 +19,110 @@ const yaSaludados = new Set();
 const BIENVENIDA = "Hola! Bienvenido a Total Carnes. Soy el asistente automatico, te puedo ayudar con horarios, ubicacion, formas de pago y promociones.";
 
 const RESPUESTAS = [
-    { palabras: ["horario", "hora", "abierto", "abren", "cierran"], respuesta: "Abrimos todos los dias de 9 a 21hs." },
-    { palabras: ["25 de diciembre", "25/12", "navidad"], respuesta: "El 25 de diciembre permanecemos cerrados." },
-    { palabras: ["1 de enero", "1/1", "ano nuevo"], respuesta: "El 1 de enero permanecemos cerrados." },
-    { palabras: ["viernes santo", "semana santa"], respuesta: "El Viernes Santo permanecemos cerrados." },
-    { palabras: ["1 de mayo", "1/5", "dia del trabajador"], respuesta: "El 1 de mayo permanecemos cerrados." },
-    { palabras: ["envio", "domicilio", "entregan", "reparto"], respuesta: "Por el momento no hacemos envios, la atencion es solo en el local." },
-    { palabras: ["direccion", "ubicacion", "donde estan"], respuesta: "Estamos en Hipolito Yrigoyen 3884." },
-    { palabras: ["pago", "pagar", "efectivo", "tarjeta", "debito", "credito", "mercado pago", "qr"], respuesta: "Aceptamos efectivo, debito, credito, Mercado Pago y QR." },
-    { palabras: ["pedido", "encargar", "reservar"], respuesta: "Por WhatsApp no tomamos pedidos, te esperamos en el local para que elijas tu corte." },
-    { palabras: ["promo", "descuento", "oferta"], respuesta: "Estas son nuestras promos vigentes: Lunes a viernes 10% off en efectivo. Lunes a viernes 20% off con Cuenta DNI (tope $6000 por persona/semana). Jueves 10% off en milanesas. Sabado y domingo 50% off en hamburguesas." },
-    ];
+      { palabras: ["horario", "hora", "abierto", "abren", "cierran"], respuesta: "Abrimos todos los dias de 9 a 21hs." },
+      { palabras: ["25 de diciembre", "25/12", "navidad"], respuesta: "El 25 de diciembre permanecemos cerrados." },
+      { palabras: ["1 de enero", "1/1", "ano nuevo"], respuesta: "El 1 de enero permanecemos cerrados." },
+      { palabras: ["viernes santo", "semana santa"], respuesta: "El Viernes Santo permanecemos cerrados." },
+      { palabras: ["1 de mayo", "1/5", "dia del trabajador"], respuesta: "El 1 de mayo permanecemos cerrados." },
+      { palabras: ["envio", "domicilio", "entregan", "reparto"], respuesta: "Por el momento no hacemos envios, la atencion es solo en el local." },
+      { palabras: ["direccion", "ubicacion", "donde estan"], respuesta: "Estamos en Hipolito Yrigoyen 3884." },
+      { palabras: ["pago", "pagar", "efectivo", "tarjeta", "debito", "credito", "mercado pago", "qr"], respuesta: "Aceptamos efectivo, debito, credito, Mercado Pago y QR." },
+      { palabras: ["pedido", "encargar", "reservar"], respuesta: "Por WhatsApp no tomamos pedidos, te esperamos en el local para que elijas tu corte." },
+      { palabras: ["promo", "descuento", "oferta"], respuesta: "Estas son nuestras promos vigentes: Lunes a viernes 10% off en efectivo. Lunes a viernes 20% off con Cuenta DNI (tope $6000 por persona/semana). Jueves 10% off en milanesas. Sabado y domingo 50% off en hamburguesas." },
+      ];
 
 const NO_ENTENDIDO = "Gracias por tu mensaje. Ya le avisamos a un empleado para que te responda en breve.";
 
 function generarRespuesta(texto) {
-      const textoLower = texto.toLowerCase();
-      for (const item of RESPUESTAS) {
-              if (item.palabras.some((p) => textoLower.includes(p))) {
-                        return item.respuesta;
-              }
-      }
-      return NO_ENTENDIDO;
+        const textoLower = texto.toLowerCase();
+        for (const item of RESPUESTAS) {
+                  if (item.palabras.some((p) => textoLower.includes(p))) {
+                              return item.respuesta;
+                  }
+        }
+        return NO_ENTENDIDO;
+}
+
+function normalizarNumeroAR(numero) {
+        if (numero.indexOf("549") === 0) {
+                  return "54" + numero.substring(3);
+        }
+        return numero;
 }
 
 async function enviarMensaje(numeroDestino, texto) {
-      const url = "https://graph.facebook.com/v20.0/" + PHONE_NUMBER_ID + "/messages";
-      const resp = await fetch(url, {
-              method: "POST",
-              headers: {
-                        Authorization: "Bearer " + WHATSAPP_TOKEN,
-                        "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                        messaging_product: "whatsapp",
-                        to: numeroDestino,
-                        text: { body: texto },
-              }),
-      });
-      const data = await resp.text();
-      console.log(">>> Respuesta de Meta al enviar mensaje:", resp.status, data);
+        var numeroFinal = normalizarNumeroAR(numeroDestino);
+        const url = "https://graph.facebook.com/v20.0/" + PHONE_NUMBER_ID + "/messages";
+        const resp = await fetch(url, {
+                  method: "POST",
+                  headers: {
+                              Authorization: "Bearer " + WHATSAPP_TOKEN,
+                              "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                              messaging_product: "whatsapp",
+                              to: numeroFinal,
+                              text: { body: texto },
+                  }),
+        });
+        const data = await resp.text();
+        console.log(">>> Respuesta de Meta al enviar mensaje:", resp.status, data);
 }
 
 app.get("/privacidad", (req, res) => {
-      res.send(
-              "<html><head><meta charset=\"utf-8\"><title>Politica de Privacidad - Total Carnes</title></head>" +
-              "<body style=\"font-family: sans-serif; max-width: 700px; margin: 40px auto; line-height: 1.6; padding: 0 20px;\">" +
-              "<h1>Politica de Privacidad</h1>" +
-              "<p><strong>Total Carnes</strong> utiliza un asistente automatico de WhatsApp para responder consultas de clientes (horarios, ubicacion, formas de pago y promociones).</p>" +
-              "<h2>Datos que recolectamos</h2>" +
-              "<p>Cuando nos escribis por WhatsApp, recibimos tu numero de telefono y el contenido de tus mensajes, unicamente para poder responderte.</p>" +
-              "<h2>Uso de los datos</h2>" +
-              "<p>Estos datos se usan solo para responder tus consultas. No los compartimos con terceros, salvo con Meta/WhatsApp como proveedor de la infraestructura de mensajeria.</p>" +
-              "<h2>Conservacion</h2>" +
-              "<p>No almacenamos un historial permanente de conversaciones mas alla de lo necesario para operar el servicio.</p>" +
-              "<h2>Contacto</h2>" +
-              "<p>Ante cualquier consulta sobre esta politica, podes escribirnos a totalcarnes.bb@gmail.com.</p>" +
-              "</body></html>"
-            );
+        res.send(
+                  "<html><head><meta charset=\"utf-8\"><title>Politica de Privacidad - Total Carnes</title></head>" +
+                  "<body style=\"font-family: sans-serif; max-width: 700px; margin: 40px auto; line-height: 1.6; padding: 0 20px;\">" +
+                  "<h1>Politica de Privacidad</h1>" +
+                  "<p><strong>Total Carnes</strong> utiliza un asistente automatico de WhatsApp para responder consultas de clientes (horarios, ubicacion, formas de pago y promociones).</p>" +
+                  "<h2>Datos que recolectamos</h2>" +
+                  "<p>Cuando nos escribis por WhatsApp, recibimos tu numero de telefono y el contenido de tus mensajes, unicamente para poder responderte.</p>" +
+                  "<h2>Uso de los datos</h2>" +
+                  "<p>Estos datos se usan solo para responder tus consultas. No los compartimos con terceros, salvo con Meta/WhatsApp como proveedor de la infraestructura de mensajeria.</p>" +
+                  "<h2>Conservacion</h2>" +
+                  "<p>No almacenamos un historial permanente de conversaciones mas alla de lo necesario para operar el servicio.</p>" +
+                  "<h2>Contacto</h2>" +
+                  "<p>Ante cualquier consulta sobre esta politica, podes escribirnos a totalcarnes.bb@gmail.com.</p>" +
+                  "</body></html>"
+                );
 });
 
 app.get("/webhook", (req, res) => {
-      const mode = req.query["hub.mode"];
-      const token = req.query["hub.verify_token"];
-      const challenge = req.query["hub.challenge"];
+        const mode = req.query["hub.mode"];
+        const token = req.query["hub.verify_token"];
+        const challenge = req.query["hub.challenge"];
 
           if (mode === "subscribe" && token === VERIFY_TOKEN) {
-                  res.status(200).send(challenge);
+                    res.status(200).send(challenge);
           } else {
-                  res.sendStatus(403);
+                    res.sendStatus(403);
           }
 });
 
 app.post("/webhook", async (req, res) => {
-      try {
-              const entry = req.body.entry && req.body.entry[0];
-              const change = entry && entry.changes && entry.changes[0];
-              const mensaje = change && change.value && change.value.messages && change.value.messages[0];
+        try {
+                  const entry = req.body.entry && req.body.entry[0];
+                  const change = entry && entry.changes && entry.changes[0];
+                  const mensaje = change && change.value && change.value.messages && change.value.messages[0];
 
-        if (mensaje && mensaje.type === "text") {
-                  const numero = mensaje.from;
-                  const texto = mensaje.text.body;
+          if (mensaje && mensaje.type === "text") {
+                      const numero = mensaje.from;
+                      const texto = mensaje.text.body;
 
-                if (!yaSaludados.has(numero)) {
-                            yaSaludados.add(numero);
-                            await enviarMensaje(numero, BIENVENIDA);
-                }
+                    if (!yaSaludados.has(numero)) {
+                                  yaSaludados.add(numero);
+                                  await enviarMensaje(numero, BIENVENIDA);
+                    }
 
-                const respuesta = generarRespuesta(texto);
-                  await enviarMensaje(numero, respuesta);
+                    const respuesta = generarRespuesta(texto);
+                      await enviarMensaje(numero, respuesta);
+          }
+
+          res.sendStatus(200);
+        } catch (err) {
+                  console.error("Error procesando mensaje:", err);
+                  res.sendStatus(200);
         }
-
-        res.sendStatus(200);
-      } catch (err) {
-              console.error("Error procesando mensaje:", err);
-              res.sendStatus(200);
-      }
 });
 
 const PORT = process.env.PORT || 3000;
