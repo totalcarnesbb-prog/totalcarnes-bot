@@ -15,21 +15,29 @@ const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
+const NUMERO_DUENO = "5492915765295";
+
 const yaSaludados = new Set();
 
-const BIENVENIDA = "Hola! Bienvenido a Total Carnes. Soy el asistente automatico, te puedo ayudar con horarios, ubicacion, formas de pago y promociones.";
+const BIENVENIDA = "Hola! Bienvenido a Total Carnes. Soy el asistente automatico, en que te puedo ayudar hoy?";
 
-// Toda la info real del negocio, que la IA va a usar como unica fuente de verdad.
+const LINK_RESENA = "https://g.page/r/CY-t1KzqBCcQEAE/review";
+const PEDIDO_RESENA = "\n\nSi te sirvio, nos ayudaria mucho que nos dejes una resena en Google: " + LINK_RESENA;
+
+const LINK_MAPS = "https://www.google.com/maps/search/?api=1&query=Hipolito+Yrigoyen+3884+Bahia+Blanca";
+
 const INFO_NEGOCIO = `
 Sos el asistente de WhatsApp de "Total Carnes", una carniceria.
 
 DATOS DEL NEGOCIO (usa solo esta informacion, nunca inventes nada que no este aca):
 - Horario: todos los dias de 9 a 21hs.
 - Dias que permanecen CERRADOS (excepcion al horario normal): 25 de diciembre, 1 de enero, Viernes Santo y 1 de mayo. Solo menciona estos cierres si preguntan puntualmente por esa fecha o por feriados; en una pregunta general de horario NO los menciones.
-- Direccion: Hipolito Yrigoyen 3884.
+- Direccion: Hipolito Yrigoyen 3884. Cuando des la direccion o alguien pregunte como llegar, siempre incluis este link de Google Maps al final: ${LINK_MAPS}
 - No hacen envios a domicilio, la atencion es solo en el local.
 - Formas de pago: efectivo, debito, credito, Mercado Pago y QR.
 - No toman pedidos por WhatsApp; el cliente tiene que ir al local a elegir su corte.
+- Productos: carne vacuna, cerdo y pollo. Cortes envasados al vacio y tambien cortados en el momento. Ademas, segun disponibilidad, tienen conejo, cabrito, cordero y lechon (aclara que estos ultimos dependen de la disponibilidad del dia).
+- NO venden comidas elaboradas ni preparadas: nada de carne desmechada, combos o sanduches con pan, pata, ni platos listos. Solo venden la carne cruda para llevar. Si preguntan por algo asi, aclara amablemente que no hacen ese tipo de productos, solo venden cortes de carne.
 - Promociones vigentes:
   * Lunes a viernes: 10% off pagando en efectivo.
   * Lunes a viernes: 20% off pagando con Cuenta DNI (tope de reintegro $6.000 por persona por semana).
@@ -37,15 +45,23 @@ DATOS DEL NEGOCIO (usa solo esta informacion, nunca inventes nada que no este ac
   * Sabado y domingo: 50% off en hamburguesas.
 - Los precios de los cortes todavia no estan disponibles por este medio; si preguntan un precio especifico, respondeles que por ahora no tenes esa info cargada y que un empleado se los va a pasar.
 
+RECOMENDACIONES Y CALCULO DE CANTIDADES:
+- Si te preguntan que corte conviene para tal ocasion (asado, milanesas, guiso, etc) o cuanta carne calcular para X personas, podes responder usando tu conocimiento general de cocina y parrilla argentina (por ejemplo: para asado calcula 400-500g de carne por persona como guia general).
+- Aclara que es una guia orientativa, no una regla exacta.
+- Esto es independiente de la disponibilidad real en el local: no confirmes que un corte especifico esta disponible hoy, eso lo confirma un empleado.
+
 INSTRUCCIONES DE ESTILO:
 - Respondes en español rioplatense, como un empleado amable de la carniceria.
 - Se breve: 1 a 3 oraciones, sin relleno.
 - No uses markdown ni asteriscos para negritas (esto es WhatsApp, se ve mal el markdown ahi). Los saltos de linea si podes usarlos si hace falta una lista corta.
 - Si la pregunta no tiene nada que ver con el negocio (por ejemplo pide una receta, chiste, opinion politica, etc), respondes amablemente que solo podes ayudar con consultas de la carniceria.
 - Si la pregunta no la podes responder con la info de arriba (por ejemplo algo muy especifico que no sabes), decis que ya le avisaste a un empleado para que responda en breve. No inventes datos que no esten en la lista de arriba.
+- Si el mensaje del cliente es un RECLAMO o QUEJA (producto en mal estado, mala atencion, un problema con su compra, etc), empeza tu respuesta con la etiqueta exacta [RECLAMO] al principio (sin nada mas antes), seguida de una respuesta empatica pidiendole disculpas y avisandole que ya se lo derivaste a un encargado para resolverlo. Para cualquier otra consulta normal, NO uses esa etiqueta.
 `.trim();
 
 async function generarRespuestaIA(textoCliente) {
+  const FALLBACK = "Gracias por tu mensaje. Ya le avisamos a un empleado para que te responda en breve.";
+
   const resp = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -64,12 +80,26 @@ async function generarRespuestaIA(textoCliente) {
   if (!resp.ok) {
     const errText = await resp.text();
     console.log(">>> Error de la API de Claude:", resp.status, errText);
-    return "Gracias por tu mensaje. Ya le avisamos a un empleado para que te responda en breve.";
+    return { texto: FALLBACK, esReclamo: false };
   }
 
   const data = await resp.json();
-  const texto = data.content && data.content[0] && data.content[0].text;
-  return texto || "Gracias por tu mensaje. Ya le avisamos a un empleado para que te responda en breve.";
+  let texto = data.content && data.content[0] && data.content[0].text;
+
+  if (!texto) {
+    return { texto: FALLBACK, esReclamo: false };
+  }
+
+  const esReclamo = texto.trim().indexOf("[RECLAMO]") === 0;
+  if (esReclamo) {
+    texto = texto.replace("[RECLAMO]", "").trim();
+  }
+
+  if (texto.trim() === FALLBACK || esReclamo) {
+    return { texto: texto, esReclamo: esReclamo };
+  }
+
+  return { texto: texto + PEDIDO_RESENA, esReclamo: false };
 }
 
 function normalizarNumeroAR(numero) {
@@ -143,8 +173,15 @@ app.post("/webhook", async (req, res) => {
         await enviarMensaje(numero, BIENVENIDA);
       }
 
-      const respuesta = await generarRespuestaIA(texto);
-      await enviarMensaje(numero, respuesta);
+      const resultado = await generarRespuestaIA(texto);
+      await enviarMensaje(numero, resultado.texto);
+
+      if (resultado.esReclamo) {
+        await enviarMensaje(
+          NUMERO_DUENO,
+          "Reclamo nuevo de " + numero + ":\n" + texto
+        );
+      }
     }
 
     res.sendStatus(200);
