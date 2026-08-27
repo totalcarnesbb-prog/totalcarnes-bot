@@ -18,6 +18,7 @@ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const NUMERO_DUENO = "5492915765295";
 
 const yaSaludados = new Set();
+const yaPidieronResena = new Set();
 
 const BIENVENIDA = "Hola! Bienvenido a Total Carnes. Soy el asistente automatico, en que te puedo ayudar hoy?";
 
@@ -59,7 +60,7 @@ INSTRUCCIONES DE ESTILO:
 - Si el mensaje del cliente es un RECLAMO o QUEJA (producto en mal estado, mala atencion, un problema con su compra, etc), empeza tu respuesta con la etiqueta exacta [RECLAMO] al principio (sin nada mas antes), seguida de una respuesta empatica pidiendole disculpas y avisandole que ya se lo derivaste a un encargado para resolverlo. Para cualquier otra consulta normal, NO uses esa etiqueta.
 `.trim();
 
-async function generarRespuestaIA(textoCliente) {
+async function generarRespuestaIA(textoCliente, numero) {
   const FALLBACK = "Gracias por tu mensaje. Ya le avisamos a un empleado para que te responda en breve.";
 
   const resp = await fetch("https://api.anthropic.com/v1/messages", {
@@ -99,7 +100,12 @@ async function generarRespuestaIA(textoCliente) {
     return { texto: texto, esReclamo: esReclamo };
   }
 
-  return { texto: texto + PEDIDO_RESENA, esReclamo: false };
+  if (!yaPidieronResena.has(numero)) {
+    yaPidieronResena.add(numero);
+    texto = texto + PEDIDO_RESENA;
+  }
+
+  return { texto: texto, esReclamo: false };
 }
 
 function normalizarNumeroAR(numero) {
@@ -173,7 +179,7 @@ app.post("/webhook", async (req, res) => {
         await enviarMensaje(numero, BIENVENIDA);
       }
 
-      const resultado = await generarRespuestaIA(texto);
+      const resultado = await generarRespuestaIA(texto, numero);
       await enviarMensaje(numero, resultado.texto);
 
       if (resultado.esReclamo) {
