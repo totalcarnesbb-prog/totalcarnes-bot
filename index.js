@@ -18,7 +18,7 @@ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const NUMERO_DUENO = "5492915765295";
 
 const yaSaludados = new Set();
-const yaPidieronResena = new Set();
+const contadorRespuestas = new Map();
 
 const BIENVENIDA = "Hola! Bienvenido a Total Carnes. Soy el asistente automatico, en que te puedo ayudar hoy?";
 
@@ -111,8 +111,11 @@ async function generarRespuestaIA(textoCliente, numero) {
     return { texto: texto, esReclamo: esReclamo };
   }
 
-  if (!yaPidieronResena.has(numero)) {
-    yaPidieronResena.add(numero);
+  const cantidadPrevia = contadorRespuestas.get(numero) || 0;
+  const cantidadNueva = cantidadPrevia + 1;
+  contadorRespuestas.set(numero, cantidadNueva);
+
+  if (cantidadNueva === 3) {
     texto = texto + PEDIDO_RESENA;
   }
 
