@@ -27,6 +27,8 @@ const PEDIDO_RESENA = "\n\nSi te sirvio, nos ayudaria mucho que nos dejes una re
 
 const LINK_MAPS = "https://www.google.com/maps/search/?api=1&query=Hipolito+Yrigoyen+3884+Bahia+Blanca";
 
+const LINK_YOUTUBE = "https://www.youtube.com/@totalcarnesbb";
+
 const INFO_NEGOCIO = `
 Sos el asistente de WhatsApp de "Total Carnes", una carniceria.
 
@@ -52,10 +54,9 @@ PROMOCIONES VIGENTES (son excluyentes entre si: es una promo o la otra, nunca se
 - Jueves: 10% off en todas las milanesas. Esta es una promo aparte, independiente de las de pago; no la relaciones ni la sumes con las anteriores.
 - Sabado y domingo: 50% off en hamburguesas.
 
-RECOMENDACIONES Y CALCULO DE CANTIDADES:
-- Si te preguntan que corte conviene para tal ocasion (asado, milanesas, guiso, etc) o cuanta carne calcular para X personas, podes responder usando tu conocimiento general de cocina y parrilla argentina (por ejemplo: para asado calcula 400-500g de carne por persona como guia general).
-- Aclara que es una guia orientativa, no una regla exacta.
-- Esto es independiente de la disponibilidad real en el local: no confirmes que un corte especifico esta disponible hoy, eso lo confirma un empleado.
+RECOMENDACIONES, CANTIDADES Y RECETAS:
+- Si te preguntan que corte conviene para tal ocasion (asado, milanesas, guiso, etc) o cuanta carne calcular para X personas, podes responder usando tu conocimiento general de cocina y parrilla argentina (por ejemplo: para asado calcula 400-500g de carne por persona como guia general). Aclara que es una guia orientativa, no una regla exacta. Esto es independiente de la disponibilidad real en el local: no confirmes que un corte especifico esta disponible hoy, eso lo confirma un empleado.
+- Si preguntan como cocinar o preparar algun corte en particular, o piden una receta, invitalos a ver el canal de YouTube de Total Carnes, que tiene videos con recetas: ${LINK_YOUTUBE}. Podes dar alguna sugerencia breve tambien si queres, pero siempre menciona el canal como el lugar donde van a encontrar el paso a paso completo.
 
 CASOS PARTICULARES:
 - Si alguien pregunta como enviar un curriculum / busca trabajo, decile que puede mandarlo a cv.totalcarnes@gmail.com.
@@ -66,9 +67,11 @@ INSTRUCCIONES DE ESTILO:
 - Respondes en español rioplatense, como un empleado amable de la carniceria.
 - Se breve: 1 a 3 oraciones, sin relleno.
 - No uses markdown ni asteriscos para negritas (esto es WhatsApp, se ve mal el markdown ahi). Los saltos de linea si podes usarlos si hace falta una lista corta.
-- Si la pregunta no tiene nada que ver con el negocio (por ejemplo pide una receta, chiste, opinion politica, etc), respondes amablemente que solo podes ayudar con consultas de la carniceria.
+- Si la pregunta no tiene nada que ver con el negocio (por ejemplo pide un chiste, opinion politica, etc), respondes amablemente que solo podes ayudar con consultas de la carniceria.
 - Si la pregunta no la podes responder con la info de arriba (por ejemplo algo muy especifico que no sabes), decis que ya le avisaste a un empleado para que responda en breve. No inventes datos que no esten en la lista de arriba.
-- Si el mensaje del cliente es un RECLAMO o QUEJA (producto en mal estado, mala atencion, un problema con su compra, etc), empeza tu respuesta con la etiqueta exacta [RECLAMO] al principio (sin nada mas antes), seguida de una respuesta empatica pidiendole disculpas y avisandole que ya se lo derivaste a un encargado para resolverlo. Para cualquier otra consulta normal, NO uses esa etiqueta.
+- Si el mensaje del cliente es un RECLAMO o QUEJA (producto en mal estado, mala atencion, un problema con su compra, etc), empeza tu respuesta con la etiqueta exacta [RECLAMO] al principio (sin nada mas antes), seguida de una respuesta empatica pidiendole disculpas y avisandole que ya se lo derivaste a un encargado para resolverlo.
+- Si el cliente pide explicitamente hablar con una persona, dice que es urgente, o necesita comunicarse ya mismo con alguien del local (mas alla de si es un reclamo o no), empeza tu respuesta con la etiqueta exacta [URGENTE] al principio (sin nada mas antes), seguida de una respuesta amable confirmandole que ya avisaste a un encargado y que se van a comunicar con el a la brevedad.
+- Para cualquier otra consulta normal, NO uses ninguna de esas dos etiquetas.
 `.trim();
 
 async function generarRespuestaIA(textoCliente, numero) {
@@ -92,23 +95,27 @@ async function generarRespuestaIA(textoCliente, numero) {
   if (!resp.ok) {
     const errText = await resp.text();
     console.log(">>> Error de la API de Claude:", resp.status, errText);
-    return { texto: FALLBACK, esReclamo: false };
+    return { texto: FALLBACK, avisar: false };
   }
 
   const data = await resp.json();
   let texto = data.content && data.content[0] && data.content[0].text;
 
   if (!texto) {
-    return { texto: FALLBACK, esReclamo: false };
+    return { texto: FALLBACK, avisar: false };
   }
 
-  const esReclamo = texto.trim().indexOf("[RECLAMO]") === 0;
-  if (esReclamo) {
+  let motivo = null;
+  if (texto.trim().indexOf("[RECLAMO]") === 0) {
+    motivo = "Reclamo";
     texto = texto.replace("[RECLAMO]", "").trim();
+  } else if (texto.trim().indexOf("[URGENTE]") === 0) {
+    motivo = "Urgente";
+    texto = texto.replace("[URGENTE]", "").trim();
   }
 
-  if (texto.trim() === FALLBACK || esReclamo) {
-    return { texto: texto, esReclamo: esReclamo };
+  if (texto.trim() === FALLBACK || motivo) {
+    return { texto: texto, avisar: motivo };
   }
 
   const cantidadPrevia = contadorRespuestas.get(numero) || 0;
@@ -119,7 +126,7 @@ async function generarRespuestaIA(textoCliente, numero) {
     texto = texto + PEDIDO_RESENA;
   }
 
-  return { texto: texto, esReclamo: false };
+  return { texto: texto, avisar: false };
 }
 
 function normalizarNumeroAR(numero) {
@@ -196,10 +203,10 @@ app.post("/webhook", async (req, res) => {
       const resultado = await generarRespuestaIA(texto, numero);
       await enviarMensaje(numero, resultado.texto);
 
-      if (resultado.esReclamo) {
+      if (resultado.avisar) {
         await enviarMensaje(
           NUMERO_DUENO,
-          "Reclamo nuevo de " + numero + ":\n" + texto
+          resultado.avisar + " de " + numero + ":\n" + texto
         );
       }
     }
