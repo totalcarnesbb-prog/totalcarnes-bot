@@ -16,9 +16,11 @@ const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
 const NUMERO_DUENO = "5492915765295";
+const HORAS_PAUSA_MS = 60 * 60 * 1000; // 1 hora
 
 const yaSaludados = new Set();
 const contadorRespuestas = new Map();
+const pausadoHasta = new Map(); // numero del cliente -> timestamp hasta el que el bot no debe intervenir
 
 const BIENVENIDA = "Hola! Bienvenido a Total Carnes. Soy el asistente automatico, en que te puedo ayudar hoy?";
 
@@ -48,7 +50,7 @@ PRODUCTOS:
 - Otros productos que tambien venden (mencionalos SOLO si preguntan puntualmente por alguno de estos, nunca los enumeres todos de forma proactiva ni armes un listado largo sin que lo pidan): ensaladas, leña, carbon, pan, snacks, productos de la marca "Las Dinas" (fiambres y demas), pastas de "Joselito", helados "Freddo" y "Fra Nui", milanesas de soja rellenas, papas congeladas, verduras congeladas, rebozados de pollo, fiambres y picada, bebidas, una seleccion de vinos de la marca "La Perla", y cervezas.
 - Los precios de los cortes todavia no estan disponibles por este medio; si preguntan un precio especifico, respondeles que por ahora no tenes esa info cargada y que un empleado se los va a pasar.
 
-PROMOCIONES VIGENTES (son excluyentes entre si: es una promo o la otra, nunca se acumulan. No las presentes como que se suman ni uses frases tipo "ademas hay..." conectando una promo con otra, pero tampoco aclares que no son acumulativas, solo si lo preguntan):
+PROMOCIONES VIGENTES (son excluyentes entre si: es una promo o la otra, nunca se acumulan. No las presentes como que se suman ni uses frases tipo "ademas hay..." conectando una promo con otra):
 - Lunes a viernes: 10% off pagando en efectivo.
 - Lunes a viernes: 20% off pagando con Cuenta DNI (tope de reintegro $6.000 por persona por semana).
 - Jueves: 10% off en todas las milanesas. Esta es una promo aparte, independiente de las de pago; no la relaciones ni la sumes con las anteriores.
@@ -189,11 +191,32 @@ app.post("/webhook", async (req, res) => {
   try {
     const entry = req.body.entry && req.body.entry[0];
     const change = entry && entry.changes && entry.changes[0];
+
+    // Caso 1: vos (o un empleado) le escribio manualmente al cliente desde la app de WhatsApp Business.
+    // Pausamos el bot para ese numero durante 1 hora.
+    if (change && change.field === "smb_message_echoes") {
+      const echo = change.value && change.value.message_echoes && change.value.message_echoes[0];
+      if (echo && echo.to) {
+        pausadoHasta.set(echo.to, Date.now() + HORAS_PAUSA_MS);
+        console.log(">>> Pausando bot para " + echo.to + " por 1 hora (respuesta manual detectada)");
+      }
+      res.sendStatus(200);
+      return;
+    }
+
+    // Caso 2: mensaje normal de un cliente.
     const mensaje = change && change.value && change.value.messages && change.value.messages[0];
 
     if (mensaje && mensaje.type === "text") {
       const numero = mensaje.from;
       const texto = mensaje.text.body;
+
+      const hastaCuando = pausadoHasta.get(numero);
+      if (hastaCuando && hastaCuando > Date.now()) {
+        console.log(">>> Bot pausado para " + numero + ", no intervengo.");
+        res.sendStatus(200);
+        return;
+      }
 
       if (!yaSaludados.has(numero)) {
         yaSaludados.add(numero);
