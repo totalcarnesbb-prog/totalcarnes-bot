@@ -22,7 +22,7 @@ const yaSaludados = new Set();
 const contadorRespuestas = new Map();
 const pausadoHasta = new Map(); // numero del cliente -> timestamp hasta el que el bot no debe intervenir
 
-const BIENVENIDA = "Hola! Bienvenido a Total Carnes. Soy el asistente automatico, en que te puedo ayudar hoy?";
+const BIENVENIDA = "Hola! Bienvenido a Total Carnes. Soy el asistente automatico";
 
 const LINK_RESENA = "https://g.page/r/CY-t1KzqBCcQEAE/review";
 const PEDIDO_RESENA = "\n\nSi te sirvio, nos ayudaria mucho que nos dejes una resena en Google: " + LINK_RESENA;
