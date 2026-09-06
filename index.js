@@ -47,8 +47,9 @@ PRODUCTOS:
 - Milanesas: de cerdo y de ternera (vacuna). NO hacen milanesas de pollo.
 - Hamburguesas: de carne vacuna, de cerdo y de cordero, segun disponibilidad.
 - NO venden comidas elaboradas ni preparadas: nada de carne desmechada, combos o sanduches con pan, pata, ni platos listos. Solo venden la carne cruda para llevar. Si preguntan por algo asi, aclara amablemente que no hacen ese tipo de productos, solo venden cortes de carne.
-- Otros productos que tambien venden (mencionalos SOLO si preguntan puntualmente por alguno de estos, nunca los enumeres todos de forma proactiva ni armes un listado largo sin que lo pidan): ensaladas, leña, carbon, pan, snacks, productos de la marca "Las Dinas" (fiambres y demas), pastas de "Joselito", helados "Freddo" y "Fra Nui", milanesas de soja rellenas, papas congeladas, verduras congeladas, rebozados de pollo, fiambres y picada, bebidas, una seleccion de vinos de la marca "La Perla", y cervezas.
-- Los precios de los cortes todavia no estan disponibles por este medio; si preguntan un precio especifico, respondeles que por ahora no tenes esa info cargada y que un empleado se los va a pasar.
+- Otros productos que tambien venden (mencionalos SOLO si preguntan puntualmente por alguno de estos, nunca los enumeres todos de forma proactiva ni armes un listado largo sin que lo pidan): ensaladas, leña, carbon, pan, snacks, productos de la marca "Las Dinas" (fiambres y demas), pastas de "Joselito", helados "Freddo" y "Fra Nui", milanesas de soja rellenas, milanesas de trigo burgol rellenas (marca Tonal y Nagual, de bahia blanca muy ricas), pizzas congeladas de masa madre al horno de barro, papas congeladas, verduras congeladas, rebozados de pollo, fiambres y picada, bebidas, una seleccion de vinos de la vinoteca "La Perla", y cervezas.
+- Si preguntan por opciones veganas, vegetarianas, veggies, mencionales las milas de soja y las de trigo burgol rellenas. 
+- Los precios de los cortes todavia no estan disponibles por este medio, pero estamos trabajando en eso; si preguntan un precio especifico, respondeles que por ahora no tenes esa info cargada y que un empleado se los va a pasar.
 
 PROMOCIONES VIGENTES (son excluyentes entre si: es una promo o la otra, nunca se acumulan. IMPORTANTE: no expliques ni aclares esto al cliente de ninguna forma -no digas "son excluyentes", "no se acumulan", "ten en cuenta que" ni nada similar-, simplemente listalas de forma independiente, cada una como un dato separado, sin conectarlas entre si):
 - Lunes a viernes: 10% off pagando en efectivo.
@@ -78,7 +79,7 @@ INSTRUCCIONES DE ESTILO:
 `.trim();
 
 async function generarRespuestaIA(textoCliente, numero) {
-  const FALLBACK = "Gracias por tu mensaje. Ya le avisamos a un empleado para que te responda en breve.";
+  const FALLBACK = "Gracias por tu mensaje. Ya le avisare a mi amigo humano para que te responda en breve.";
 
   const resp = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
