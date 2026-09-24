@@ -17,12 +17,17 @@ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
 const NUMERO_DUENO = "5492915765295";
 const HORAS_PAUSA_MS = 60 * 60 * 1000; // 1 hora
+const RESPUESTAS_PARA_RESENA = 6; // recien se pide resena en conversaciones largas y utiles
+const HORAS_INACTIVIDAD_RESET_MS = 3 * 60 * 60 * 1000; // despues de 3hs sin escribir, se considera charla nueva
+const MENSAJES_HISTORIAL_MAX = 12; // cuantos mensajes (entre cliente y bot) recordamos como maximo por conversacion
 
 const yaSaludados = new Set();
 const contadorRespuestas = new Map();
 const pausadoHasta = new Map(); // numero del cliente -> timestamp hasta el que el bot no debe intervenir
+const historiales = new Map(); // numero del cliente -> { mensajes: [...], ultimaActividad: timestamp }
+const mensajesProcesados = new Set(); // ids de mensajes ya atendidos, para no responder duplicados
 
-const BIENVENIDA = "Hola! Bienvenido a Total Carnes. Soy el asistente automatico";
+const BIENVENIDA = "Hola! Bienvenido a Total Carnes. Soy el asistente automatico, en que te puedo ayudar hoy?";
 
 const LINK_RESENA = "https://g.page/r/CY-t1KzqBCcQEAE/review";
 const PEDIDO_RESENA = "\n\nSi te sirvio, nos ayudaria mucho que nos dejes una resena en Google: " + LINK_RESENA;
@@ -39,7 +44,7 @@ DATOS DEL NEGOCIO (usa solo esta informacion, nunca inventes nada que no este ac
 - Dias que permanecen CERRADOS (excepcion al horario normal): 25 de diciembre, 1 de enero, Viernes Santo y 1 de mayo. Solo menciona estos cierres si preguntan puntualmente por esa fecha o por feriados; en una pregunta general de horario NO los menciones.
 - Direccion: Hipolito Yrigoyen 3884. Cuando des la direccion o alguien pregunte como llegar, siempre incluis este link de Google Maps al final: ${LINK_MAPS}
 - No hacen envios a domicilio, la atencion es solo en el local.
-- Formas de pago: efectivo, debito, credito, Mercado Pago y QR.
+- Formas de pago: efectivo, debito, credito, Mercado Pago y QR. La promo de Cuenta DNI es la billetera virtual del Banco Provincia (Banco de la Provincia de Buenos Aires) - NUNCA digas que es del Banco Nacion ni que es una tarjeta de debito.
 - No toman pedidos por WhatsApp; el cliente tiene que ir al local a elegir su corte.
 
 PRODUCTOS:
@@ -47,14 +52,13 @@ PRODUCTOS:
 - Milanesas: de cerdo y de ternera (vacuna). NO hacen milanesas de pollo.
 - Hamburguesas: de carne vacuna, de cerdo y de cordero, segun disponibilidad.
 - NO venden comidas elaboradas ni preparadas: nada de carne desmechada, combos o sanduches con pan, pata, ni platos listos. Solo venden la carne cruda para llevar. Si preguntan por algo asi, aclara amablemente que no hacen ese tipo de productos, solo venden cortes de carne.
-- Otros productos que tambien venden (mencionalos SOLO si preguntan puntualmente por alguno de estos, nunca los enumeres todos de forma proactiva ni armes un listado largo sin que lo pidan): ensaladas, leña, carbon, pan, snacks, productos de la marca "Las Dinas" (fiambres y demas), pastas de "Joselito", helados "Freddo" y "Fra Nui", milanesas de soja rellenas, milanesas de trigo burgol rellenas (marca Tonal y Nagual, de bahia blanca muy ricas), pizzas congeladas de masa madre al horno de barro, papas congeladas, verduras congeladas, rebozados de pollo, fiambres y picada, bebidas, una seleccion de vinos de la vinoteca "La Perla", y cervezas.
-- Si preguntan por opciones veganas, vegetarianas, veggies, mencionales las milas de soja y las de trigo burgol rellenas. 
-- Los precios de los cortes todavia no estan disponibles por este medio, pero estamos trabajando en eso; si preguntan un precio especifico, respondeles que por ahora no tenes esa info cargada y que un empleado se los va a pasar.
+- Otros productos que tambien venden (mencionalos SOLO si preguntan puntualmente por alguno de estos, nunca los enumeres todos de forma proactiva ni armes un listado largo sin que lo pidan): ensaladas, leña, carbon, pan, snacks, productos de la marca "Las Dinas" (fiambres y demas), pastas de "Joselito", helados "Freddo" y "Fra Nui", milanesas de soja rellenas, papas congeladas, verduras congeladas, rebozados de pollo, fiambres y picada, bebidas, una seleccion de vinos de la marca "La Perla", y cervezas.
+- Los precios de los cortes todavia no estan disponibles por este medio; si preguntan un precio especifico, respondeles que por ahora no tenes esa info cargada y que un empleado se los va a pasar.
 
 PROMOCIONES VIGENTES (son excluyentes entre si: es una promo o la otra, nunca se acumulan. IMPORTANTE: no expliques ni aclares esto al cliente de ninguna forma -no digas "son excluyentes", "no se acumulan", "ten en cuenta que" ni nada similar-, simplemente listalas de forma independiente, cada una como un dato separado, sin conectarlas entre si):
 - Lunes a viernes: 10% off pagando en efectivo.
 - Lunes a viernes: 20% off pagando con Cuenta DNI (tope de reintegro $6.000 por persona por semana).
-- Jueves: 10% off en todas las milanesas. Esta es una promo aparte, independiente de las de pago; no la relaciones ni la sumes con las anteriores.
+- Jueves: 10% off en todas las milanesas.
 - Sabado y domingo: 50% off en hamburguesas.
 
 RECOMENDACIONES, CANTIDADES Y RECETAS:
@@ -67,19 +71,44 @@ CASOS PARTICULARES:
 - Si te piden una colaboracion o donacion para un evento (bingo, rifa, torneo, etc de un club, escuela u organizacion), agradece el mensaje, decile que por el momento no pueden sumarse con colaboraciones, y deseale exito con el evento. No menciones que ya hacen donaciones en otro lado ni des explicaciones de mas.
 
 INSTRUCCIONES DE ESTILO:
+- Tenes memoria de los mensajes anteriores de esta misma conversacion (te los paso como contexto). Usala: no repitas la misma respuesta genérica si el cliente ya te dio mas detalles o ya te escribio antes, segui el hilo de la charla de forma natural.
 - IMPORTANTE: antes de que vos respondas, el sistema ya le mando automaticamente al cliente un mensaje de bienvenida (algo como "Hola! Bienvenido a Total Carnes, en que te puedo ayudar?"). Por eso, si el mensaje del cliente es solo un saludo generico sin pregunta concreta (hola, buenas, buen dia, etc), NO respondas con otro saludo tipo "Hola" de nuevo. En ese caso respondes simplemente algo breve como "Decime en que te puedo ayudar" o "Te escucho", sin repetir el saludo.
 - Respondes en español rioplatense, como un empleado amable de la carniceria.
 - Se breve: 1 a 3 oraciones, sin relleno.
 - No uses markdown ni asteriscos para negritas (esto es WhatsApp, se ve mal el markdown ahi). Los saltos de linea si podes usarlos si hace falta una lista corta.
 - Si la pregunta no tiene nada que ver con el negocio (por ejemplo pide un chiste, opinion politica, etc), respondes amablemente que solo podes ayudar con consultas de la carniceria.
 - Si la pregunta no la podes responder con la info de arriba (por ejemplo algo muy especifico que no sabes), decis que ya le avisaste a un empleado para que responda en breve. No inventes datos que no esten en la lista de arriba.
-- Si el mensaje del cliente es un RECLAMO o QUEJA (producto en mal estado, mala atencion, un problema con su compra, etc), empeza tu respuesta con la etiqueta exacta [RECLAMO] al principio (sin nada mas antes), seguida de una respuesta empatica pidiendole disculpas y avisandole que ya se lo derivaste a un encargado para resolverlo.
-- Si el cliente pide explicitamente hablar con una persona, dice que es urgente, o necesita comunicarse ya mismo con alguien del local (mas alla de si es un reclamo o no), empeza tu respuesta con la etiqueta exacta [URGENTE] al principio (sin nada mas antes), seguida de una respuesta amable confirmandole que ya avisaste a un encargado y que se van a comunicar con el a la brevedad.
+- Si el mensaje del cliente es un RECLAMO o QUEJA (producto en mal estado, mala atencion, un problema con su compra, etc), tu respuesta tiene que EMPEZAR (como primer caracter, sin nada antes) con la etiqueta exacta [RECLAMO], seguida de una respuesta empatica pidiendole disculpas y avisandole que ya se lo derivaste a un encargado para resolverlo. Esto aplica tambien si el reclamo sigue una conversacion anterior (por ejemplo, si ya te habia contado el problema y ahora te da mas detalles): seguí poniendo la etiqueta [RECLAMO] en cada respuesta mientras siga siendo parte de ese mismo reclamo, no la pongas una sola vez y despues te olvides.
+- Si el cliente pide explicitamente hablar con una persona, dice que es urgente, o necesita comunicarse ya mismo con alguien del local (mas alla de si es un reclamo o no), tu respuesta tiene que EMPEZAR (como primer caracter, sin nada antes) con la etiqueta exacta [URGENTE], seguida de una respuesta amable confirmandole que ya avisaste a un encargado y que se van a comunicar con el a la brevedad.
 - Para cualquier otra consulta normal, NO uses ninguna de esas dos etiquetas.
 `.trim();
 
+function obtenerHistorial(numero) {
+  const existente = historiales.get(numero);
+  const ahora = Date.now();
+
+  if (!existente || (ahora - existente.ultimaActividad) > HORAS_INACTIVIDAD_RESET_MS) {
+    const nuevo = { mensajes: [], ultimaActividad: ahora };
+    historiales.set(numero, nuevo);
+    return nuevo;
+  }
+
+  existente.ultimaActividad = ahora;
+  return existente;
+}
+
+function agregarAlHistorial(historial, rol, texto) {
+  historial.mensajes.push({ role: rol, content: texto });
+  if (historial.mensajes.length > MENSAJES_HISTORIAL_MAX) {
+    historial.mensajes = historial.mensajes.slice(-MENSAJES_HISTORIAL_MAX);
+  }
+}
+
 async function generarRespuestaIA(textoCliente, numero) {
-  const FALLBACK = "Gracias por tu mensaje. Ya le avisare a mi amigo humano para que te responda en breve.";
+  const FALLBACK = "Gracias por tu mensaje. Ya le avisamos a un empleado para que te responda en breve.";
+
+  const historial = obtenerHistorial(numero);
+  agregarAlHistorial(historial, "user", textoCliente);
 
   const resp = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -92,7 +121,7 @@ async function generarRespuestaIA(textoCliente, numero) {
       model: "claude-sonnet-4-6",
       max_tokens: 300,
       system: INFO_NEGOCIO,
-      messages: [{ role: "user", content: textoCliente }],
+      messages: historial.mensajes,
     }),
   });
 
@@ -109,13 +138,17 @@ async function generarRespuestaIA(textoCliente, numero) {
     return { texto: FALLBACK, avisar: false };
   }
 
+  agregarAlHistorial(historial, "assistant", texto);
+
+  // Buscamos las etiquetas en cualquier parte del texto (no solo al principio),
+  // por si la IA agrega algo antes a pesar de la instruccion.
   let motivo = null;
-  if (texto.trim().indexOf("[RECLAMO]") === 0) {
+  if (texto.indexOf("[RECLAMO]") !== -1) {
     motivo = "Reclamo";
-    texto = texto.replace("[RECLAMO]", "").trim();
-  } else if (texto.trim().indexOf("[URGENTE]") === 0) {
+    texto = texto.split("[RECLAMO]").join("").trim();
+  } else if (texto.indexOf("[URGENTE]") !== -1) {
     motivo = "Urgente";
-    texto = texto.replace("[URGENTE]", "").trim();
+    texto = texto.split("[URGENTE]").join("").trim();
   }
 
   if (texto.trim() === FALLBACK || motivo) {
@@ -126,7 +159,7 @@ async function generarRespuestaIA(textoCliente, numero) {
   const cantidadNueva = cantidadPrevia + 1;
   contadorRespuestas.set(numero, cantidadNueva);
 
-  if (cantidadNueva === 3) {
+  if (cantidadNueva === RESPUESTAS_PARA_RESENA) {
     texto = texto + PEDIDO_RESENA;
   }
 
@@ -212,6 +245,17 @@ app.post("/webhook", async (req, res) => {
     if (mensaje && mensaje.type === "text") {
       const numero = mensaje.from;
       const texto = mensaje.text.body;
+
+      // Meta a veces reenvia el mismo mensaje si el servidor tardo en responder
+      // (por ejemplo, si estaba "dormido"). Si ya lo procesamos, lo ignoramos.
+      if (mensaje.id && mensajesProcesados.has(mensaje.id)) {
+        console.log(">>> Mensaje duplicado ignorado: " + mensaje.id);
+        res.sendStatus(200);
+        return;
+      }
+      if (mensaje.id) {
+        mensajesProcesados.add(mensaje.id);
+      }
 
       const hastaCuando = pausadoHasta.get(numero);
       if (hastaCuando && hastaCuando > Date.now()) {
