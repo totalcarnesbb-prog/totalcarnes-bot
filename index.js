@@ -14,12 +14,15 @@ const VERIFY_TOKEN = "totalcarnes2026";
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+const SIPROF_URL = process.env.SIPROF_URL || "http://totalcarnes.ddns.net:53080/api/precios.php";
+const SIPROF_TOKEN = process.env.SIPROF_TOKEN;
 
 const NUMERO_DUENO = "5492915765295";
 const HORAS_PAUSA_MS = 60 * 60 * 1000; // 1 hora
 const RESPUESTAS_PARA_RESENA = 6; // recien se pide resena en conversaciones largas y utiles
 const HORAS_INACTIVIDAD_RESET_MS = 3 * 60 * 60 * 1000; // despues de 3hs sin escribir, se considera charla nueva
 const MENSAJES_HISTORIAL_MAX = 12; // cuantos mensajes (entre cliente y bot) recordamos como maximo por conversacion
+const INTENTOS_HERRAMIENTA_MAX = 3; // limite de vueltas de "buscar precio" por respuesta, para no colgarnos
 
 const yaSaludados = new Set();
 const contadorRespuestas = new Map();
@@ -53,7 +56,12 @@ PRODUCTOS:
 - Hamburguesas: de carne vacuna, de cerdo y de cordero, segun disponibilidad.
 - NO venden comidas elaboradas ni preparadas: nada de carne desmechada, combos o sanduches con pan, pata, ni platos listos. Solo venden la carne cruda para llevar. Si preguntan por algo asi, aclara amablemente que no hacen ese tipo de productos, solo venden cortes de carne.
 - Otros productos que tambien venden (mencionalos SOLO si preguntan puntualmente por alguno de estos, nunca los enumeres todos de forma proactiva ni armes un listado largo sin que lo pidan): ensaladas, leña, carbon, pan, snacks, productos de la marca "Las Dinas" (fiambres y demas), pastas de "Joselito", helados "Freddo" y "Fra Nui", milanesas de soja rellenas, papas congeladas, pizzas congeladas de "Tonal y Nagual", condimentos, verduras congeladas, rebozados de pollo, fiambres y picada, bebidas, una seleccion de vinos de la marca "La Perla", y cervezas.
-- Los precios de los cortes todavia no estan disponibles por este medio; si preguntan un precio especifico, respondeles que por ahora no tenes esa info cargada y que un empleado se los va a pasar.
+- Si preguntan el precio de algun producto, usa la herramienta buscar_precio para consultarlo en el sistema real de la carniceria antes de responder. Nunca inventes ni supongas un precio. Si la herramienta no encuentra el producto o devuelve un error, decile amablemente que por ahora no podes confirmar ese precio por este medio y que un empleado se lo va a pasar. Si preguntan por varios productos en el mismo mensaje, podes usar la herramienta mas de una vez.
+- EXCEPCION temporal: si preguntan especificamente el precio de las HAMBURGUESAS o "burger" o vienen por la "promo" desde instagram, NO uses la herramienta buscar_precio para eso, usa directamente estos precios (ya incluyen el descuento del fin de semana, son los precios finales que paga el cliente). Esto vale solo para sabado 3 y domingo 4 de octubre de 2026, despues de esa fecha hay que sacar este texto:
+  - Hamburguesa de carne vacuna: $6.299,50 el kilo ($2.519,80 el paquete de 2 unidades, 400g).
+  - Hamburguesa de cerdo: $3.999,50 el kilo ($1.599,80 el paquete de 2 unidades, 400g).
+  - Hamburguesa de cordero: $8.499,50 el kilo ($3.399,80 el paquete de 2 unidades, 400g).
+  - Cada hamburguesa pesa 200g y vienen en paquetes de 2 unidades.
 
 PROMOCIONES VIGENTES (son excluyentes entre si: es una promo o la otra, nunca se acumulan. IMPORTANTE: no expliques ni aclares esto al cliente de ninguna forma -no digas "son excluyentes", "no se acumulan", "ten en cuenta que" ni nada similar-, simplemente listalas de forma independiente, cada una como un dato separado, sin conectarlas entre si):
 - Lunes a viernes: 10% off pagando en efectivo.
@@ -83,6 +91,48 @@ INSTRUCCIONES DE ESTILO:
 - Para cualquier otra consulta normal, NO uses ninguna de esas dos etiquetas.
 `.trim();
 
+const HERRAMIENTAS = [
+  {
+    name: "buscar_precio",
+    description:
+      "Busca el precio de un producto en el sistema real de la carniceria (SIPROF). Usala cada vez que el cliente pregunte cuanto sale, cuanto cuesta, o el precio de algun producto. Nunca inventes un precio sin usar esta herramienta primero.",
+    input_schema: {
+      type: "object",
+      properties: {
+        consulta: {
+          type: "string",
+          description:
+            "Nombre del producto a buscar, en pocas palabras, tal como lo menciono el cliente (por ejemplo: 'asado', 'milanesa de ternera', 'vacio').",
+        },
+      },
+      required: ["consulta"],
+    },
+  },
+];
+
+async function consultarPrecio(consulta) {
+  try {
+    const url = SIPROF_URL + "?formato=texto&q=" + encodeURIComponent(consulta);
+    const resp = await fetch(url, {
+      headers: {
+        Authorization: "Bearer " + SIPROF_TOKEN,
+      },
+    });
+    const texto = await resp.text();
+
+    if (!resp.ok) {
+      console.log(">>> Error consultando precio en SIPROF:", resp.status, texto);
+      return "No se pudo consultar el precio en este momento (error del sistema).";
+    }
+
+    console.log(">>> Consulta de precio '" + consulta + "' -> " + texto);
+    return texto;
+  } catch (err) {
+    console.log(">>> Excepcion consultando precio en SIPROF:", err.message);
+    return "No se pudo consultar el precio en este momento (no se pudo conectar al sistema).";
+  }
+}
+
 function obtenerHistorial(numero) {
   const existente = historiales.get(numero);
   const ahora = Date.now();
@@ -110,29 +160,64 @@ async function generarRespuestaIA(textoCliente, numero) {
   const historial = obtenerHistorial(numero);
   agregarAlHistorial(historial, "user", textoCliente);
 
-  const resp = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "x-api-key": ANTHROPIC_API_KEY,
-      "anthropic-version": "2023-06-01",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: 300,
-      system: INFO_NEGOCIO,
-      messages: historial.mensajes,
-    }),
-  });
+  // Copia de trabajo: acá se van agregando las idas y vueltas con la herramienta de precios,
+  // pero eso NO se guarda en el historial permanente de la conversación (solo se guarda el texto final).
+  let mensajesParaClaude = historial.mensajes.slice();
 
-  if (!resp.ok) {
-    const errText = await resp.text();
-    console.log(">>> Error de la API de Claude:", resp.status, errText);
-    return { texto: FALLBACK, avisar: false };
+  let texto = null;
+
+  for (let intento = 0; intento < INTENTOS_HERRAMIENTA_MAX; intento++) {
+    const resp = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: 300,
+        system: INFO_NEGOCIO,
+        tools: HERRAMIENTAS,
+        messages: mensajesParaClaude,
+      }),
+    });
+
+    if (!resp.ok) {
+      const errText = await resp.text();
+      console.log(">>> Error de la API de Claude:", resp.status, errText);
+      return { texto: FALLBACK, avisar: false };
+    }
+
+    const data = await resp.json();
+
+    if (data.stop_reason === "tool_use") {
+      const usoHerramienta = (data.content || []).find((b) => b.type === "tool_use");
+
+      if (!usoHerramienta) {
+        break;
+      }
+
+      const resultadoPrecio = await consultarPrecio(usoHerramienta.input.consulta);
+
+      mensajesParaClaude.push({ role: "assistant", content: data.content });
+      mensajesParaClaude.push({
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: usoHerramienta.id,
+            content: resultadoPrecio,
+          },
+        ],
+      });
+
+      continue; // volvemos a llamar a Claude, ahora con el resultado del precio
+    }
+
+    texto = data.content && data.content[0] && data.content[0].text;
+    break;
   }
-
-  const data = await resp.json();
-  let texto = data.content && data.content[0] && data.content[0].text;
 
   if (!texto) {
     return { texto: FALLBACK, avisar: false };
@@ -197,7 +282,7 @@ app.get("/privacidad", (req, res) => {
     "<html><head><meta charset=\"utf-8\"><title>Politica de Privacidad - Total Carnes</title></head>" +
     "<body style=\"font-family: sans-serif; max-width: 700px; margin: 40px auto; line-height: 1.6; padding: 0 20px;\">" +
     "<h1>Politica de Privacidad</h1>" +
-    "<p><strong>Total Carnes</strong> utiliza un asistente automatico de WhatsApp para responder consultas de clientes (horarios, ubicacion, formas de pago y promociones).</p>" +
+    "<p><strong>Total Carnes</strong> utiliza un asistente automatico de WhatsApp para responder consultas de clientes (horarios, ubicacion, formas de pago, promociones y precios).</p>" +
     "<h2>Datos que recolectamos</h2>" +
     "<p>Cuando nos escribis por WhatsApp, recibimos tu numero de telefono y el contenido de tus mensajes, unicamente para poder responderte.</p>" +
     "<h2>Uso de los datos</h2>" +
