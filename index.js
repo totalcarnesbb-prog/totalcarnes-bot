@@ -29,6 +29,8 @@ const contadorRespuestas = new Map();
 const pausadoHasta = new Map(); // numero del cliente -> timestamp hasta el que el bot no debe intervenir
 const historiales = new Map(); // numero del cliente -> { mensajes: [...], ultimaActividad: timestamp }
 const mensajesProcesados = new Set(); // ids de mensajes ya atendidos, para no responder duplicados
+const textosRecientes = new Map(); // "numero|texto" -> timestamp del ultimo mensaje identico recibido, por si WhatsApp lo reenvia con otro id
+const VENTANA_TEXTO_DUPLICADO_MS = 90 * 1000; // si llega el mismo texto del mismo numero en menos de 90s, lo tratamos como reenvio duplicado
 
 const BIENVENIDA = "Hola! Bienvenido a Total Carnes. Soy el asistente automatico, en que te puedo ayudar hoy?";
 
@@ -55,9 +57,9 @@ PRODUCTOS:
 - Milanesas: de cerdo y de ternera (vacuna). NO hacen milanesas de pollo.
 - Hamburguesas: de carne vacuna, de cerdo y de cordero, segun disponibilidad.
 - NO venden comidas elaboradas ni preparadas: nada de carne desmechada, combos o sanduches con pan, pata, ni platos listos. Solo venden la carne cruda para llevar. Si preguntan por algo asi, aclara amablemente que no hacen ese tipo de productos, solo venden cortes de carne.
-- Otros productos que tambien venden (mencionalos SOLO si preguntan puntualmente por alguno de estos, nunca los enumeres todos de forma proactiva ni armes un listado largo sin que lo pidan): pan de papa de "level up" , huevos, ensaladas, leña, carbon, pan, snacks, productos de la marca "Las Dinas" (fiambres y demas), pastas de "Joselito", helados "Freddo" y "Fra Nui", milanesas de soja rellenas, papas congeladas, pizzas congeladas de "Tonal y Nagual", condimentos, verduras congeladas, rebozados de pollo, fiambres y picada, bebidas, una seleccion de vinos de la marca "La Perla", y cervezas.
+- Otros productos que tambien venden (mencionalos SOLO si preguntan puntualmente por alguno de estos, nunca los enumeres todos de forma proactiva ni armes un listado largo sin que lo pidan): pan de papa de "level up", huevos, ensaladas, leña, carbon, pan, snacks, productos de la marca "Las Dinas" (fiambres y demas), pastas de "Joselito", helados "Freddo" y "Fra Nui", milanesas de soja rellenas, papas congeladas, pizzas congeladas de "Tonal y Nagual", condimentos, verduras congeladas, rebozados de pollo, fiambres y picada, bebidas, una seleccion de vinos de la marca "La Perla", y cervezas.
 - Si preguntan el precio de algun producto, usa la herramienta buscar_precio para consultarlo en el sistema real de la carniceria antes de responder. Nunca inventes ni supongas un precio. Si la herramienta no encuentra el producto o devuelve un error, decile amablemente que por ahora no podes confirmar ese precio por este medio y que un empleado se lo va a pasar. Si preguntan por varios productos en el mismo mensaje, podes usar la herramienta mas de una vez.
-- EXCEPCION temporal: si preguntan especificamente el precio de las HAMBURGUESAS o "burger" o vienen por la "promo" desde instagram, NO uses la herramienta buscar_precio para eso, usa directamente estos precios (ya incluyen el descuento de viernes a domingos, son los precios finales que paga el cliente). Esto vale solo para sabado 3 y domingo 4 de octubre de 2026, despues de esa fecha hay que sacar este texto:
+- EXCEPCION temporal: si preguntan especificamente el precio de las HAMBURGUESAS o "burger" o vienen por la "promo" desde instagram, NO uses la herramienta buscar_precio para eso, usa directamente estos precios (ya incluyen el descuento de viernes a domingos, son los precios finales que paga el cliente). Esto vale para el finde del 9, 10 y 11 de octubre de 2026, despues de esa fecha hay que sacar este texto (o actualizarlo si sigue la promo otro finde mas):
   - Hamburguesa de carne vacuna: $6.299,50 el kilo ($2.519,80 el paquete de 2 unidades, 400g).
   - Hamburguesa de cerdo: $3.999,50 el kilo ($1.599,80 el paquete de 2 unidades, 400g).
   - Hamburguesa de cordero: $8.499,50 el kilo ($3.399,80 el paquete de 2 unidades, 400g).
@@ -341,6 +343,17 @@ app.post("/webhook", async (req, res) => {
       if (mensaje.id) {
         mensajesProcesados.add(mensaje.id);
       }
+
+      // A veces WhatsApp reenvia el mensaje del cliente con un id distinto (por un corte de conexion, etc).
+      // Si llega el mismo texto del mismo numero muy seguido, lo tratamos como el mismo mensaje.
+      const claveTexto = numero + "|" + texto.trim().toLowerCase();
+      const ultimaVezTexto = textosRecientes.get(claveTexto);
+      if (ultimaVezTexto && (Date.now() - ultimaVezTexto) < VENTANA_TEXTO_DUPLICADO_MS) {
+        console.log(">>> Mensaje identico reenviado muy rapido, lo ignoro: " + claveTexto);
+        res.sendStatus(200);
+        return;
+      }
+      textosRecientes.set(claveTexto, Date.now());
 
       const hastaCuando = pausadoHasta.get(numero);
       if (hastaCuando && hastaCuando > Date.now()) {
