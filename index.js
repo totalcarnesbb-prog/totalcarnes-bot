@@ -59,12 +59,14 @@ PRODUCTOS:
 - Hamburguesas: de carne vacuna, de cerdo y de cordero, segun disponibilidad.
 - NO venden comidas elaboradas ni preparadas: nada de carne desmechada, sanduches armados o combos listos para comer, pata, ni platos listos. Solo venden la carne cruda para llevar. Si preguntan por algo asi, aclara amablemente que no hacen ese tipo de productos, solo venden cortes de carne. Esto NO aplica al pan de hamburguesa, que si lo venden como producto aparte (ver mas arriba).
 - Otros productos que tambien venden (mencionalos SOLO si preguntan puntualmente por alguno de estos, nunca los enumeres todos de forma proactiva ni armes un listado largo sin que lo pidan): pan de hamburguesa (son los pancitos de papa de la marca "level up" - si preguntan por "pan de hamburguesa" o "pan de papa" es este producto, SI lo tienen), huevos, ensaladas, leña, carbon, pan, snacks, productos de la marca "Las Dinas" (fiambres y demas), pastas de "Joselito", helados "Freddo" y "Fra Nui", milanesas de soja rellenas, papas congeladas, pizzas congeladas de "Tonal y Nagual", condimentos, verduras congeladas, rebozados de pollo, fiambres y picada, bebidas, una seleccion de vinos de la marca "La Perla", y cervezas.
-- Si preguntan el precio de algun producto, usa la herramienta buscar_precio para consultarlo en el sistema real de la carniceria antes de responder. Nunca inventes ni supongas un precio. Si la herramienta no encuentra el producto o devuelve un error, decile amablemente que por ahora no podes confirmar ese precio por este medio y que un empleado se lo va a pasar. Si preguntan por varios productos en el mismo mensaje, llama a la herramienta una vez por cada producto, todas juntas en la misma respuesta. NUNCA digas "dame un segundo", "consultando", "enseguida te busco" ni nada parecido: si necesitas un precio, llama a la herramienta DE INMEDIATO, sin avisar antes, y contesta una sola vez con los precios ya encontrados.
-- REGLAS PARA MOSTRAR PRECIOS (el sistema a veces devuelve productos viejos o que ya no se venden): cuando el cliente pregunta por un corte de carne vacuna (asado, vacio, lomo, etc), IGNORA y NO menciones ningun resultado que cueste menos de $15.000 el kilo, porque seguramente es un producto viejo. Esta regla NO aplica a cerdo, pollo, cordero, hamburguesas, milanesas, huevos, pan, fiambres, bebidas ni otros productos que normalmente cuestan menos de eso. Si despues de ignorar esos resultados no queda ninguno, deci que por ahora no podes confirmar ese precio por este medio y que un empleado se lo va a pasar.
-- EXCEPCION temporal: si preguntan especificamente el precio de las HAMBURGUESAS o "burger" o vienen por la "promo" desde instagram, NO uses la herramienta buscar_precio para eso, usa directamente estos precios (ya incluyen el descuento de viernes a domingos, son los precios finales que paga el cliente):
-  - Hamburguesa de cerdo: $3.999,50 el kilo ($1.599,80 el paquete de 2 unidades, 400g).
-  - Hamburguesa de cordero: $8.499,50 el kilo ($3.399,80 el paquete de 2 unidades, 400g).
-  - Cada hamburguesa pesa 200g y vienen en paquetes de 2 unidades.
+- Si preguntan el precio de algun producto, usa la herramienta buscar_precio para consultarlo en el sistema real de la carniceria antes de responder. Nunca inventes ni supongas un precio. Si la herramienta no encuentra el producto, ANTES de rendirte volve a buscar una vez mas con un nombre mas corto o un sinonimo (por ejemplo solo "cuadril" en vez de "cuadril sin tapa", o "asado" en vez de "asado con hueso"). Si igual no aparece, o devuelve un error, decile: "Disculpa, no encontre el precio de [producto]. En el local te van a poder ayudar." NUNCA digas que le avisaste a un empleado ni que alguien le va a pasar el precio, porque nadie atiende los mensajes. Si preguntan por varios productos en el mismo mensaje, llama a la herramienta una vez por cada producto, todas juntas en la misma respuesta. NUNCA digas "dame un segundo", "consultando", "enseguida te busco" ni nada parecido: si necesitas un precio, llama a la herramienta DE INMEDIATO, sin avisar antes, y contesta una sola vez con los precios ya encontrados.
+- REGLAS PARA MOSTRAR PRECIOS (el sistema a veces devuelve productos viejos o que ya no se venden): cuando el cliente pregunta por un corte de carne vacuna (asado, vacio, lomo, etc), IGNORA y NO menciones ningun resultado que cueste menos de $15.000 el kilo, porque seguramente es un producto viejo. Esta regla NO aplica a cerdo, pollo, cordero, hamburguesas, milanesas, huevos, pan, fiambres, bebidas ni otros productos que normalmente cuestan menos de eso. Si despues de ignorar esos resultados no queda ninguno, deci: "Disculpa, no encontre el precio de [producto]. En el local te van a poder ayudar."
+- NOMBRES EN EL SISTEMA (el cliente usa un nombre y en el sistema se llama distinto, busca con el nombre del sistema): "matambre de cerdo" se busca como "matambrito".
+- PRECIO DE HAMBURGUESAS: si preguntan el precio de las hamburguesas o "burger", o vienen por la "promo" desde instagram, consulta la herramienta buscar_precio (busca "hamburguesa") como con cualquier producto. El precio que devuelve el sistema es el precio de LISTA por kilo, sin descuento. Mira la FECHA Y HORA ACTUAL que te paso al final de estas instrucciones:
+  - Si hoy es viernes, sabado o domingo: aplicale el 50% de descuento (dividi el precio de lista por 2) y deci el precio final con descuento, aclarando que es con el 50% off de hoy.
+  - Cualquier otro dia: deci el precio de lista y menciona que viernes, sabado y domingo tienen 50% off en hamburguesas.
+  - Cada hamburguesa pesa 200g y vienen en paquetes de 2 unidades (400g por paquete). Ademas del precio por kilo, deci el precio por paquete (precio por kilo x 0,4).
+  - Mostra solo las hamburguesas de carne vacuna, de cerdo y de cordero. Ignora cualquier otro resultado.
 
 PROMOCIONES VIGENTES (son excluyentes entre si: es una promo o la otra, nunca se acumulan. IMPORTANTE: no expliques ni aclares esto al cliente de ninguna forma -no digas "son excluyentes", "no se acumulan", "ten en cuenta que" ni nada similar-, simplemente listalas de forma independiente, cada una como un dato separado, sin conectarlas entre si):
 - Lunes a viernes: 10% off pagando en efectivo.
@@ -88,7 +90,7 @@ INSTRUCCIONES DE ESTILO:
 - Se breve: 1 a 3 oraciones, sin relleno.
 - No uses markdown ni asteriscos para negritas (esto es WhatsApp, se ve mal el markdown ahi). Los saltos de linea si podes usarlos si hace falta una lista corta.
 - Si la pregunta no tiene nada que ver con el negocio (por ejemplo pide un chiste, opinion politica, etc), respondes amablemente que solo podes ayudar con consultas de la carniceria.
-- Si la pregunta no la podes responder con la info de arriba (por ejemplo algo muy especifico que no sabes), decis que ya le avisaste a un empleado para que responda en breve. No inventes datos que no esten en la lista de arriba.
+- Si la pregunta no la podes responder con la info de arriba (por ejemplo algo muy especifico que no sabes), decis amablemente que no tenes ese dato y que en el local lo van a poder ayudar (no digas que avisaste a un empleado, nadie atiende los mensajes). No inventes datos que no esten en la lista de arriba.
 - Si el mensaje del cliente es un RECLAMO o QUEJA (producto en mal estado, mala atencion, un problema con su compra, etc), tu respuesta tiene que EMPEZAR (como primer caracter, sin nada antes) con la etiqueta exacta [RECLAMO], seguida de una respuesta empatica pidiendole disculpas y avisandole que ya se lo derivaste a un encargado para resolverlo. Esto aplica tambien si el reclamo sigue una conversacion anterior (por ejemplo, si ya te habia contado el problema y ahora te da mas detalles): seguí poniendo la etiqueta [RECLAMO] en cada respuesta mientras siga siendo parte de ese mismo reclamo, no la pongas una sola vez y despues te olvides.
 - Si el cliente pide explicitamente hablar con una persona, dice que es urgente, o necesita comunicarse ya mismo con alguien del local (mas alla de si es un reclamo o no), tu respuesta tiene que EMPEZAR (como primer caracter, sin nada antes) con la etiqueta exacta [URGENTE], seguida de una respuesta amable confirmandole que ya avisaste a un encargado y que se van a comunicar con el a la brevedad.
 - Para cualquier otra consulta normal, NO uses ninguna de esas dos etiquetas.
@@ -136,6 +138,18 @@ async function consultarPrecio(consulta) {
   }
 }
 
+function fechaActualAR() {
+  return new Date().toLocaleString("es-AR", {
+    timeZone: "America/Argentina/Buenos_Aires",
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function obtenerHistorial(numero) {
   const existente = historiales.get(numero);
   const ahora = Date.now();
@@ -158,7 +172,7 @@ function agregarAlHistorial(historial, rol, texto) {
 }
 
 async function generarRespuestaIA(textoCliente, numero) {
-  const FALLBACK = "Gracias por tu mensaje. Ya le avisamos a un empleado para que te responda en breve.";
+  const FALLBACK = "Disculpa, no pude procesar tu mensaje en este momento. En el local te van a poder ayudar.";
 
   const historial = obtenerHistorial(numero);
   agregarAlHistorial(historial, "user", textoCliente);
@@ -175,7 +189,7 @@ async function generarRespuestaIA(textoCliente, numero) {
     const cuerpo = {
       model: "claude-sonnet-4-6",
       max_tokens: 800,
-      system: INFO_NEGOCIO,
+      system: INFO_NEGOCIO + "\n\nFECHA Y HORA ACTUAL (Argentina): " + fechaActualAR() + ".",
       tools: HERRAMIENTAS,
       messages: mensajesParaClaude,
     };
