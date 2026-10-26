@@ -22,7 +22,8 @@ const HORAS_PAUSA_MS = 60 * 60 * 1000; // 1 hora
 const RESPUESTAS_PARA_RESENA = 6; // recien se pide resena en conversaciones largas y utiles
 const HORAS_INACTIVIDAD_RESET_MS = 3 * 60 * 60 * 1000; // despues de 3hs sin escribir, se considera charla nueva
 const MENSAJES_HISTORIAL_MAX = 12; // cuantos mensajes (entre cliente y bot) recordamos como maximo por conversacion
-const INTENTOS_HERRAMIENTA_MAX = 3; // limite de vueltas de "buscar precio" por respuesta, para no colgarnos
+const INTENTOS_HERRAMIENTA_MAX = 5; // limite de vueltas de "buscar precio" por respuesta, para no colgarnos
+const PROMETE_CONSULTAR = /(dame|danos|un) (un )?segundo|consultando|enseguida te|perm[ií]teme|te busco|ya te (paso|busco|consulto)|busco los/i;
 
 const yaSaludados = new Set();
 const contadorRespuestas = new Map();
@@ -58,9 +59,9 @@ PRODUCTOS:
 - Hamburguesas: de carne vacuna, de cerdo y de cordero, segun disponibilidad.
 - NO venden comidas elaboradas ni preparadas: nada de carne desmechada, sanduches armados o combos listos para comer, pata, ni platos listos. Solo venden la carne cruda para llevar. Si preguntan por algo asi, aclara amablemente que no hacen ese tipo de productos, solo venden cortes de carne. Esto NO aplica al pan de hamburguesa, que si lo venden como producto aparte (ver mas arriba).
 - Otros productos que tambien venden (mencionalos SOLO si preguntan puntualmente por alguno de estos, nunca los enumeres todos de forma proactiva ni armes un listado largo sin que lo pidan): pan de hamburguesa (son los pancitos de papa de la marca "level up" - si preguntan por "pan de hamburguesa" o "pan de papa" es este producto, SI lo tienen), huevos, ensaladas, leña, carbon, pan, snacks, productos de la marca "Las Dinas" (fiambres y demas), pastas de "Joselito", helados "Freddo" y "Fra Nui", milanesas de soja rellenas, papas congeladas, pizzas congeladas de "Tonal y Nagual", condimentos, verduras congeladas, rebozados de pollo, fiambres y picada, bebidas, una seleccion de vinos de la marca "La Perla", y cervezas.
-- Si preguntan el precio de algun producto, usa la herramienta buscar_precio para consultarlo en el sistema real de la carniceria antes de responder. Nunca inventes ni supongas un precio. Si la herramienta no encuentra el producto o devuelve un error, decile amablemente que por ahora no podes confirmar ese precio por este medio y que un empleado se lo va a pasar. Si preguntan por varios productos en el mismo mensaje, podes usar la herramienta mas de una vez.
-- EXCEPCION temporal: si preguntan especificamente el precio de las HAMBURGUESAS o "burger" o vienen por la "promo" desde instagram, NO uses la herramienta buscar_precio para eso, usa directamente estos precios (ya incluyen el descuento de viernes a domingos, son los precios finales que paga el cliente). Esto vale para el finde del 9, 10 y 11 de octubre de 2026, despues de esa fecha hay que sacar este texto (o actualizarlo si sigue la promo otro finde mas):
-  - Hamburguesa de carne vacuna: $6.299,50 el kilo ($2.519,80 el paquete de 2 unidades, 400g).
+- Si preguntan el precio de algun producto, usa la herramienta buscar_precio para consultarlo en el sistema real de la carniceria antes de responder. Nunca inventes ni supongas un precio. Si la herramienta no encuentra el producto o devuelve un error, decile amablemente que por ahora no podes confirmar ese precio por este medio y que un empleado se lo va a pasar. Si preguntan por varios productos en el mismo mensaje, llama a la herramienta una vez por cada producto, todas juntas en la misma respuesta. NUNCA digas "dame un segundo", "consultando", "enseguida te busco" ni nada parecido: si necesitas un precio, llama a la herramienta DE INMEDIATO, sin avisar antes, y contesta una sola vez con los precios ya encontrados.
+- REGLAS PARA MOSTRAR PRECIOS (el sistema a veces devuelve productos viejos o que ya no se venden): cuando el cliente pregunta por un corte de carne vacuna (asado, vacio, lomo, etc), IGNORA y NO menciones ningun resultado que cueste menos de $15.000 el kilo, porque seguramente es un producto viejo. Esta regla NO aplica a cerdo, pollo, cordero, hamburguesas, milanesas, huevos, pan, fiambres, bebidas ni otros productos que normalmente cuestan menos de eso. Si despues de ignorar esos resultados no queda ninguno, deci que por ahora no podes confirmar ese precio por este medio y que un empleado se lo va a pasar.
+- EXCEPCION temporal: si preguntan especificamente el precio de las HAMBURGUESAS o "burger" o vienen por la "promo" desde instagram, NO uses la herramienta buscar_precio para eso, usa directamente estos precios (ya incluyen el descuento de viernes a domingos, son los precios finales que paga el cliente):
   - Hamburguesa de cerdo: $3.999,50 el kilo ($1.599,80 el paquete de 2 unidades, 400g).
   - Hamburguesa de cordero: $8.499,50 el kilo ($3.399,80 el paquete de 2 unidades, 400g).
   - Cada hamburguesa pesa 200g y vienen en paquetes de 2 unidades.
@@ -167,8 +168,24 @@ async function generarRespuestaIA(textoCliente, numero) {
   let mensajesParaClaude = historial.mensajes.slice();
 
   let texto = null;
+  let consultoPrecios = false;
+  let forzarHerramienta = false;
 
   for (let intento = 0; intento < INTENTOS_HERRAMIENTA_MAX; intento++) {
+    const cuerpo = {
+      model: "claude-sonnet-4-6",
+      max_tokens: 800,
+      system: INFO_NEGOCIO,
+      tools: HERRAMIENTAS,
+      messages: mensajesParaClaude,
+    };
+
+    // Si la IA dijo "dame un segundo" sin consultar nada, la obligamos a usar la herramienta.
+    if (forzarHerramienta) {
+      cuerpo.tool_choice = { type: "any" };
+      forzarHerramienta = false;
+    }
+
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -176,13 +193,7 @@ async function generarRespuestaIA(textoCliente, numero) {
         "anthropic-version": "2023-06-01",
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 300,
-        system: INFO_NEGOCIO,
-        tools: HERRAMIENTAS,
-        messages: mensajesParaClaude,
-      }),
+      body: JSON.stringify(cuerpo),
     });
 
     if (!resp.ok) {
@@ -192,32 +203,43 @@ async function generarRespuestaIA(textoCliente, numero) {
     }
 
     const data = await resp.json();
+    const bloques = data.content || [];
+    const usos = bloques.filter((b) => b.type === "tool_use");
 
-    if (data.stop_reason === "tool_use") {
-      const usoHerramienta = (data.content || []).find((b) => b.type === "tool_use");
+    // La IA pidio buscar uno o varios precios (puede pedir varios a la vez, por ejemplo 8 cortes).
+    if (data.stop_reason === "tool_use" && usos.length > 0) {
+      consultoPrecios = true;
 
-      if (!usoHerramienta) {
-        break;
-      }
+      const resultados = await Promise.all(
+        usos.map(async (uso) => ({
+          type: "tool_result",
+          tool_use_id: uso.id,
+          content: await consultarPrecio((uso.input && uso.input.consulta) || ""),
+        }))
+      );
 
-      const resultadoPrecio = await consultarPrecio(usoHerramienta.input.consulta);
+      mensajesParaClaude.push({ role: "assistant", content: bloques });
+      mensajesParaClaude.push({ role: "user", content: resultados });
 
-      mensajesParaClaude.push({ role: "assistant", content: data.content });
-      mensajesParaClaude.push({
-        role: "user",
-        content: [
-          {
-            type: "tool_result",
-            tool_use_id: usoHerramienta.id,
-            content: resultadoPrecio,
-          },
-        ],
-      });
-
-      continue; // volvemos a llamar a Claude, ahora con el resultado del precio
+      continue; // volvemos a llamar a Claude, ahora con los precios
     }
 
-    texto = data.content && data.content[0] && data.content[0].text;
+    const bloqueTexto = bloques.find((b) => b.type === "text");
+    const candidato = bloqueTexto && bloqueTexto.text;
+
+    // Prometio buscar precios pero no llamo a la herramienta: reintentamos obligandola.
+    if (
+      candidato &&
+      !consultoPrecios &&
+      PROMETE_CONSULTAR.test(candidato) &&
+      intento < INTENTOS_HERRAMIENTA_MAX - 1
+    ) {
+      console.log(">>> La IA prometio consultar sin hacerlo, reintento forzando la herramienta: " + candidato);
+      forzarHerramienta = true;
+      continue;
+    }
+
+    texto = candidato;
     break;
   }
 
@@ -354,6 +376,15 @@ app.post("/webhook", async (req, res) => {
         return;
       }
       textosRecientes.set(claveTexto, Date.now());
+
+      // Comando solo para el dueño: "/precio asado" devuelve el texto crudo que manda SIPROF (sin IA).
+      if (numero === NUMERO_DUENO && texto.trim().toLowerCase().indexOf("/precio ") === 0) {
+        const consulta = texto.trim().substring(8).trim();
+        const crudo = await consultarPrecio(consulta);
+        await enviarMensaje(numero, "[SIPROF] " + consulta + ":\n" + crudo);
+        res.sendStatus(200);
+        return;
+      }
 
       const hastaCuando = pausadoHasta.get(numero);
       if (hastaCuando && hastaCuando > Date.now()) {
