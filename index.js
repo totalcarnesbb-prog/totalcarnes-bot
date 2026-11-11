@@ -33,6 +33,26 @@ const mensajesProcesados = new Set(); // ids de mensajes ya atendidos, para no r
 const textosRecientes = new Map(); // "numero|texto" -> timestamp del ultimo mensaje identico recibido, por si WhatsApp lo reenvia con otro id
 const VENTANA_TEXTO_DUPLICADO_MS = 90 * 1000; // si llega el mismo texto del mismo numero en menos de 90s, lo tratamos como reenvio duplicado
 
+const PALABRAS_SALUDO_CLAVE = new Set(["hola", "holis", "ola", "buenas", "buenos", "buen", "hey", "saludos", "ciao"]);
+const PALABRAS_SALUDO_RELLENO = new Set(["dia", "dias", "tarde", "tardes", "noche", "noches", "que", "tal", "como", "estan", "estas", "andan", "andas", "todo", "bien", "a", "todos"]);
+
+// Devuelve true si el mensaje es solo un saludo (hola, buenas tardes, holaaa, buen dia, etc), sin ninguna consulta.
+function esSoloSaludo(texto) {
+  const limpio = texto
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z\s]/g, " ")
+    .replace(/(.)\1+/g, "$1")
+    .trim();
+  if (!limpio) return false;
+  const palabras = limpio.split(/\s+/);
+  if (palabras.length > 6) return false;
+  const todasSaludo = palabras.every((p) => PALABRAS_SALUDO_CLAVE.has(p) || PALABRAS_SALUDO_RELLENO.has(p));
+  const tieneClave = palabras.some((p) => PALABRAS_SALUDO_CLAVE.has(p));
+  return todasSaludo && tieneClave;
+}
+
 const BIENVENIDA = "Hola! Bienvenido a Total Carnes. Soy el asistente automatico, en que te puedo ayudar hoy?";
 
 const LINK_RESENA = "https://g.page/r/CY-t1KzqBCcQEAE/review";
@@ -69,8 +89,8 @@ PRODUCTOS:
   - Si hoy es viernes, sabado o domingo: aplicale el 50% de descuento (dividi el precio de lista por 2) y deci el precio final con descuento, aclarando que es con el 50% off de hoy.
   - Cualquier otro dia: deci el precio de lista y menciona que viernes, sabado y domingo tienen 50% off en hamburguesas.
   - Cada hamburguesa pesa 200g y vienen en paquetes de 2 unidades (400g por paquete). Ademas del precio por kilo, deci el precio por paquete (precio por kilo x 0,4).
-  - Las hamburguesas propias son solo las de carne vacuna, de cerdo y de cordero (las "BURGER"). El 50% off aplica SOLO a esas.
-  - Ademas venden hamburguesas de la marca Union Ganadera (UG), envasadas: en el sistema figuran como "UG HAMBURGUESA 83g x4" (4 hamburguesas de 83g), "UG HAMBURGUESA 83g x12", "UG HAMBURGUESA 83g x20" y "UG HAMBURGUESA parrillera 120g x2u" (2 hamburguesas de 120g). Para buscarlas usa "UG hamburguesa". Si el cliente pregunta por el precio de las hamburguesas en general, da primero el de las propias (BURGER) y mencionale tambien las de la marca UG con su precio. Si pregunta puntualmente por las UG, da el precio de cada presentacion tal como lo devuelve el sistema (es el precio por paquete/unidad que figura ahi) SIN aplicarles el 50% de descuento. Ignora cualquier otro resultado que no sea de estas hamburguesas (por ejemplo el pan de hamburguesa).
+  - Las hamburguesas "BURGER" son las de carne vacuna, de cerdo y de cordero. El 50% off aplica SOLO a esas. NUNCA digas ni insinues que son "nuestras", "propias", "caseras", "artesanales", "de elaboracion propia" ni que las hacen en el local: solo deci de que carne son (vacuna, cerdo o cordero), el precio y como vienen (paquetes de 2 de 200g). Si preguntan quien las hace o de donde son, deci que no tenes ese dato y que en el local lo pueden ayudar.
+  - Ademas venden hamburguesas de la marca Union Ganadera (UG), envasadas: en el sistema figuran como "UG HAMBURGUESA 83g x4" (4 hamburguesas de 83g), "UG HAMBURGUESA 83g x12", "UG HAMBURGUESA 83g x20" y "UG HAMBURGUESA parrillera 120g x2u" (2 hamburguesas de 120g). Para buscarlas usa "UG hamburguesa". Si el cliente pregunta por el precio de las hamburguesas en general, da primero el de las BURGER y mencionale tambien las de la marca UG con su precio. Si pregunta puntualmente por las UG, da el precio de cada presentacion tal como lo devuelve el sistema (es el precio por paquete/unidad que figura ahi) SIN aplicarles el 50% de descuento. Ignora cualquier otro resultado que no sea de estas hamburguesas (por ejemplo el pan de hamburguesa).
 
 PROMOCIONES VIGENTES (son excluyentes entre si: es una promo o la otra, nunca se acumulan. IMPORTANTE: no expliques ni aclares esto al cliente de ninguna forma -no digas "son excluyentes", "no se acumulan", "ten en cuenta que" ni nada similar-, simplemente listalas de forma independiente, cada una como un dato separado, sin conectarlas entre si):
 - Lunes a viernes: 10% off pagando en efectivo.
@@ -89,7 +109,7 @@ CASOS PARTICULARES:
 
 INSTRUCCIONES DE ESTILO:
 - Tenes memoria de los mensajes anteriores de esta misma conversacion (te los paso como contexto). Usala: no repitas la misma respuesta genérica si el cliente ya te dio mas detalles o ya te escribio antes, segui el hilo de la charla de forma natural.
-- IMPORTANTE: antes de que vos respondas, el sistema ya le mando automaticamente al cliente un mensaje de bienvenida (algo como "Hola! Bienvenido a Total Carnes, en que te puedo ayudar?"). Por eso, si el mensaje del cliente es solo un saludo generico sin pregunta concreta (hola, buenas, buen dia, etc), NO respondas con otro saludo tipo "Hola" de nuevo. En ese caso respondes simplemente algo breve como "Decime en que te puedo ayudar" o "Te escucho", sin repetir el saludo.
+- IMPORTANTE: el sistema ya le manda automaticamente al cliente un mensaje de bienvenida y se encarga solo de los saludos sueltos (hola, buenas, buen dia, etc), asi que a vos solo te llegan mensajes con una consulta concreta. Nunca arranques tu respuesta con un saludo ("Hola", "Buenas") ni preguntes "en que te puedo ayudar": responde directo a lo que pregunto.
 - Respondes en español rioplatense, como un empleado amable de la carniceria.
 - Se breve: 1 a 3 oraciones, sin relleno.
 - No uses markdown ni asteriscos para negritas (esto es WhatsApp, se ve mal el markdown ahi). Los saltos de linea si podes usarlos si hace falta una lista corta.
@@ -407,6 +427,18 @@ app.post("/webhook", async (req, res) => {
       const hastaCuando = pausadoHasta.get(numero);
       if (hastaCuando && hastaCuando > Date.now()) {
         console.log(">>> Bot pausado para " + numero + ", no intervengo.");
+        res.sendStatus(200);
+        return;
+      }
+
+      // Saludo suelto (hola, buenas, etc): el bot solo manda la bienvenida la primera vez y despues no repite nada.
+      if (esSoloSaludo(texto)) {
+        if (!yaSaludados.has(numero)) {
+          yaSaludados.add(numero);
+          await enviarMensaje(numero, BIENVENIDA);
+        } else {
+          console.log(">>> Saludo suelto de un cliente ya saludado, no respondo: " + numero);
+        }
         res.sendStatus(200);
         return;
       }
